@@ -129,70 +129,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Ambil daftar kriteria
+// =====================================================================
+// Ambil kriteria + bobot dari tabel ahp (SUMBER KEBENARAN TUNGGAL)
+// Bobot disimpan dengan presisi penuh saat proses AHP, tanpa pembulatan.
+// Pembulatan HANYA dilakukan saat ditampilkan (number_format).
+// =====================================================================
 $kriteria_list = $pdo->query("
-    SELECT k.*
+    SELECT k.*, a.bobot_kriteria AS bobot_ahp
     FROM kriteria k
+    LEFT JOIN ahp a ON k.id_kriteria = a.id_kriteria
     ORDER BY k.kode_kriteria ASC
 ")->fetchAll();
-
-// =====================================================================
-// HITUNG BOBOT LIVE DARI MATRIKS (sama persis dengan logika di ahp.php)
-// agar nilai bobot di halaman ini KONSISTEN dengan halaman AHP
-// =====================================================================
-$live_weights = [];
-$n_krit = count($kriteria_list);
-
-if ($n_krit > 0) {
-    // Ambil perbandingan berpasangan dari DB
-    $perb_saved = [];
-    try {
-        $rows_perb = $pdo->query("SELECT id_kriteria_1, id_kriteria_2, nilai FROM ahp_perbandingan")->fetchAll();
-        foreach ($rows_perb as $r) {
-            $perb_saved[$r['id_kriteria_1']][$r['id_kriteria_2']] = (float)$r['nilai'];
-        }
-    } catch (Exception $e) { /* tabel belum ada */ }
-
-    // Bangun matriks A
-    $mat_A = [];
-    foreach ($kriteria_list as $ki) {
-        $ii = $ki['id_kriteria'];
-        foreach ($kriteria_list as $kj) {
-            $jj = $kj['id_kriteria'];
-            if ($ii == $jj) {
-                $mat_A[$ii][$jj] = 1.0;
-            } elseif (isset($perb_saved[$ii][$jj])) {
-                $mat_A[$ii][$jj] = (float)$perb_saved[$ii][$jj];
-            } elseif (isset($perb_saved[$jj][$ii]) && $perb_saved[$jj][$ii] > 0) {
-                $mat_A[$ii][$jj] = 1.0 / (float)$perb_saved[$jj][$ii];
-            } else {
-                $mat_A[$ii][$jj] = 1.0;
-            }
-        }
-    }
-
-    // Jumlah kolom
-    $col_sums_k = [];
-    foreach ($kriteria_list as $kj) {
-        $jj = $kj['id_kriteria'];
-        $s = 0;
-        foreach ($kriteria_list as $ki) {
-            $s += $mat_A[$ki['id_kriteria']][$jj];
-        }
-        $col_sums_k[$jj] = $s;
-    }
-
-    // Normalisasi & bobot (eigen vector) — identik dengan ahp.php
-    foreach ($kriteria_list as $ki) {
-        $ii = $ki['id_kriteria'];
-        $row_sum = 0;
-        foreach ($kriteria_list as $kj) {
-            $jj = $kj['id_kriteria'];
-            $row_sum += $mat_A[$ii][$jj] / ($col_sums_k[$jj] ?: 1);
-        }
-        $live_weights[$ii] = $row_sum / ($n_krit ?: 1);
-    }
-}
 
 $flash_success = get_flash('success');
 $flash_error = get_flash('error');
@@ -294,9 +241,10 @@ require_once 'includes/sidebar.php';
                         <tbody>
                             <?php if (count($kriteria_list) > 0): ?>
                                 <?php foreach ($kriteria_list as $row): 
-                                    // Gunakan bobot live (dihitung dari matriks) agar konsisten dengan halaman AHP
-                                    $bobot = isset($live_weights[$row['id_kriteria']])
-                                        ? $live_weights[$row['id_kriteria']]
+                                    // Baca bobot langsung dari tabel ahp (presisi penuh, tanpa pembulatan)
+                                    // Fallback ke kolom bobot di tabel kriteria jika ahp belum dihitung
+                                    $bobot = ($row['bobot_ahp'] !== null)
+                                        ? (float)$row['bobot_ahp']
                                         : (float)$row['bobot'];
                                     $is_cost = strtolower($row['atribut']) === 'cost';
                                 ?>

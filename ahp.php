@@ -218,6 +218,30 @@ if ($n > 0) {
     $cr = ($ri > 0) ? ($ci / $ri) : 0.0;
 }
 
+// =====================================================================
+// OVERRIDE DARI DB (SUMBER KEBENARAN TUNGGAL)
+// Nilai yang tersimpan di tabel ahp adalah referensi resmi untuk skripsi.
+// Kalkulasi live di atas hanya digunakan untuk tabel langkah-langkah
+// (norm_matrix, lambda_values). Untuk kolom Bobot, lambda_max, CI, CR
+// yang ditampilkan sebagai hasil akhir, selalu baca dari DB agar identik
+// dengan halaman Kriteria dan halaman lainnya. Tidak ada round() di sini.
+// =====================================================================
+try {
+    $ahp_db = $pdo->query("SELECT id_kriteria, bobot_kriteria, lambda_max, ci, cr FROM ahp")->fetchAll();
+    if (!empty($ahp_db)) {
+        $lambda_max = (float)$ahp_db[0]['lambda_max'];
+        $ci         = (float)$ahp_db[0]['ci'];
+        $cr         = (float)$ahp_db[0]['cr'];
+        foreach ($ahp_db as $ar) {
+            $kid = $ar['id_kriteria'];
+            if (array_key_exists($kid, $weights)) {
+                // Ganti dengan nilai DB — presisi penuh, tanpa pembulatan
+                $weights[$kid] = (float)$ar['bobot_kriteria'];
+            }
+        }
+    }
+} catch (Exception $e) { /* tabel ahp belum ada, gunakan hasil live */ }
+
 $flash_success = get_flash('success');
 $flash_error = get_flash('error');
 
