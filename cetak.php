@@ -274,7 +274,7 @@ $ahp_info = $pdo->query("SELECT cr, lambda_max, ci FROM ahp ORDER BY id_ahp DESC
             <tbody>
                 <?php if (count($ranking_data) > 0): ?>
                     <?php foreach ($ranking_data as $row): 
-                        $is_diterima = strpos(strtolower($row['status']), 'terima') !== false || strpos(strtolower($row['status']), 'layak') !== false;
+                        $is_diterima = ($row['status'] === 'Diterima');
                     ?>
                         <tr>
                             <td style="text-align: center; font-weight: bold;"><?= $row['peringkat'] ?></td>

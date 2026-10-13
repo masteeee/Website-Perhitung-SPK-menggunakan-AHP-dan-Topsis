@@ -249,7 +249,7 @@ require_once 'includes/sidebar.php';
                                                 </strong>
                                             </td>
                                             <td>
-                                                <span class="badge <?= strpos(strtolower($r['status']), 'layak') !== false || strpos(strtolower($r['status']), 'terima') !== false ? 'badge-success' : 'badge-danger' ?>">
+                                                <span class="badge <?= ($r['status'] === 'Diterima') ? 'badge-success' : 'badge-danger' ?>">
                                                     <?= htmlspecialchars($r['status']) ?>
                                                 </span>
                                             </td>

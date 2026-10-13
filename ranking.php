@@ -56,7 +56,7 @@ $total_kandidat = count($ranking_data);
 $total_diterima = 0;
 $total_tidak = 0;
 foreach ($ranking_data as $r) {
-    if (strpos(strtolower($r['status']), 'terima') !== false || strpos(strtolower($r['status']), 'layak') !== false) {
+    if ($r['status'] === 'Diterima') {
         $total_diterima++;
     } else {
         $total_tidak++;
@@ -200,7 +200,7 @@ require_once 'includes/sidebar.php';
                                 <?php foreach ($ranking_data as $row): 
                                     $score = (float)$row['nilai_preferensi'];
                                     $percent = min(100, max(0, $score * 100));
-                                    $is_diterima = strpos(strtolower($row['status']), 'terima') !== false || strpos(strtolower($row['status']), 'layak') !== false;
+                                    $is_diterima = ($row['status'] === 'Diterima');
                                 ?>
                                     <tr>
                                         <td style="text-align: center;">
