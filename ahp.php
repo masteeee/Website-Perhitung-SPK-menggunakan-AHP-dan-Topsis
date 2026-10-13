@@ -21,19 +21,18 @@ try {
 
 // Inisialisasi Matriks A (n x n)
 $matrix_A = [];
-foreach ($kriteria as $i => $row_i) {
-    $id_i = $row_i['id_kriteria'];
-    foreach ($kriteria as $j => $row_j) {
-        $id_j = $row_j['id_kriteria'];
-        if ($id_i == $id_j) {
+for ($i = 0; $i < $n; $i++) {
+    for ($j = 0; $j < $n; $j++) {
+        $id_i = $kriteria[$i]['id_kriteria'];
+        $id_j = $kriteria[$j]['id_kriteria'];
+        if ($i == $j) {
             $matrix_A[$id_i][$id_j] = 1.0;
-        } elseif (isset($perbandingan_saved[$id_i][$id_j])) {
-            $matrix_A[$id_i][$id_j] = (float)$perbandingan_saved[$id_i][$id_j];
-        } elseif (isset($perbandingan_saved[$id_j][$id_i]) && $perbandingan_saved[$id_j][$id_i] > 0) {
-            $matrix_A[$id_i][$id_j] = 1.0 / (float)$perbandingan_saved[$id_j][$id_i];
+        } elseif ($i < $j) {
+            $matrix_A[$id_i][$id_j] = (float)($perbandingan_saved[$id_i][$id_j] ?? 1.0);
         } else {
-            // Default 1 jika belum pernah diset
-            $matrix_A[$id_i][$id_j] = 1.0;
+            // i > j: resiprokal matematis dari perbandingan segitiga atas (1 / a_ji)
+            $upper = (float)($matrix_A[$id_j][$id_i] ?? ($perbandingan_saved[$id_j][$id_i] ?? 1.0));
+            $matrix_A[$id_i][$id_j] = ($upper > 0) ? (1.0 / $upper) : 1.0;
         }
     }
 }
@@ -171,6 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $col_sums = [];
 $norm_matrix = [];
 $weights = [];
+$aw_values = [];
 $lambda_values = [];
 $lambda_max = 0;
 $ci = 0;
@@ -202,7 +202,7 @@ if ($n > 0) {
         $weights[$r_id] = $row_sum / $n;
     }
 
-    // 3. Uji Konsistensi (Lambda)
+    // 3. Perkalian Matriks A * w dan Uji Konsistensi (Lambda)
     foreach ($kriteria as $row) {
         $r_id = $row['id_kriteria'];
         $aw = 0;
@@ -210,7 +210,8 @@ if ($n > 0) {
             $c_id = $col['id_kriteria'];
             $aw += $matrix_A[$r_id][$c_id] * $weights[$c_id];
         }
-        $lambda_values[$r_id] = $aw / ($weights[$r_id] ?: 1);
+        $aw_values[$r_id] = $aw;
+        $lambda_values[$r_id] = ($weights[$r_id] > 0) ? ($aw / $weights[$r_id]) : 0;
     }
 
     $lambda_max = array_sum($lambda_values) / $n;
@@ -218,14 +219,7 @@ if ($n > 0) {
     $cr = ($ri > 0) ? ($ci / $ri) : 0.0;
 }
 
-// =====================================================================
-// OVERRIDE DARI DB (SUMBER KEBENARAN TUNGGAL)
-// Nilai yang tersimpan di tabel ahp adalah referensi resmi untuk skripsi.
-// Kalkulasi live di atas hanya digunakan untuk tabel langkah-langkah
-// (norm_matrix, lambda_values). Untuk kolom Bobot, lambda_max, CI, CR
-// yang ditampilkan sebagai hasil akhir, selalu baca dari DB agar identik
-// dengan halaman Kriteria dan halaman lainnya. Tidak ada round() di sini.
-// =====================================================================
+// Sinkronisasi dengan nilai akhir yang tersimpan di basis data (jika ada)
 try {
     $ahp_db = $pdo->query("SELECT id_kriteria, bobot_kriteria, lambda_max, ci, cr FROM ahp")->fetchAll();
     if (!empty($ahp_db)) {
@@ -235,12 +229,23 @@ try {
         foreach ($ahp_db as $ar) {
             $kid = $ar['id_kriteria'];
             if (array_key_exists($kid, $weights)) {
-                // Ganti dengan nilai DB — presisi penuh, tanpa pembulatan
                 $weights[$kid] = (float)$ar['bobot_kriteria'];
             }
         }
+
+        // Hitung ulang perkalian A * w dan lambda agar seluruh tahapan tabel sinkron dengan bobot tersimpan
+        foreach ($kriteria as $row) {
+            $r_id = $row['id_kriteria'];
+            $aw = 0;
+            foreach ($kriteria as $col) {
+                $c_id = $col['id_kriteria'];
+                $aw += $matrix_A[$r_id][$c_id] * $weights[$c_id];
+            }
+            $aw_values[$r_id] = $aw;
+            $lambda_values[$r_id] = ($weights[$r_id] > 0) ? ($aw / $weights[$r_id]) : 0;
+        }
     }
-} catch (Exception $e) { /* tabel ahp belum ada, gunakan hasil live */ }
+} catch (Exception $e) { /* tabel ahp belum ada, gunakan hasil kalkulasi */ }
 
 $flash_success = get_flash('success');
 $flash_error = get_flash('error');
@@ -544,7 +549,7 @@ require_once 'includes/sidebar.php';
                             <?php foreach ($kriteria as $row): 
                                 $r_id = $row['id_kriteria'];
                                 $w = $weights[$r_id];
-                                $aw = $w * $lambda_values[$r_id];
+                                $aw = $aw_values[$r_id] ?? ($w * $lambda_values[$r_id]);
                             ?>
                                 <tr>
                                     <th><?= htmlspecialchars($row['kode_kriteria']) ?> - <?= htmlspecialchars($row['nama_kriteria']) ?></th>
